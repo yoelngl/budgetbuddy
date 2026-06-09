@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="id" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>BudgetBuddy – Transaksi</title>
+  <link rel="stylesheet" href="/styles.css"/>
+</head>
+<body>
+
+<input type="hidden" id="_userId"   th:value="${userId}"/>
+<input type="hidden" id="_username" th:value="${username}"/>
+
+<nav class="navbar">
+  <a href="/dashboard" class="navbar-brand">Budget<span>Buddy</span></a>
+  <div class="nav-links">
+    <a href="/dashboard"    class="nav-link">📊 Dashboard</a>
+    <a href="/transactions" class="nav-link">📋 Transaksi</a>
+    <a href="/report"       class="nav-link">📈 Laporan</a>
+    <a href="/categories"   class="nav-link">🏷️ Kategori</a>
+  </div>
+  <div class="navbar-user">
+    <span>👋 <strong id="navUsername"></strong></span>
+    <button onclick="doLogout()">Keluar</button>
+  </div>
+</nav>
+
+<div class="page-content">
+  <div class="section-header">
+    <h2>Semua Transaksi</h2>
+    <button class="btn btn-success btn-sm" onclick="openAddModal()">+ Tambah Transaksi</button>
+  </div>
+
+  <div class="filter-bar">
+    <div class="form-group">
+      <label>Tipe</label>
+      <select id="filterType" onchange="applyFilter()">
+        <option value="">Semua</option>
+        <option value="INCOME">Pemasukan</option>
+        <option value="EXPENSE">Pengeluaran</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Kategori</label>
+      <select id="filterCategory" onchange="applyFilter()">
+        <option value="">Semua Kategori</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Dari Tanggal</label>
+      <input type="date" id="filterStart" onchange="applyFilter()"/>
+    </div>
+    <div class="form-group">
+      <label>Sampai Tanggal</label>
+      <input type="date" id="filterEnd" onchange="applyFilter()"/>
+    </div>
+    <div class="form-group">
+      <label>Cari</label>
+      <input type="text" id="filterKeyword" placeholder="Cari deskripsi..." oninput="applyFilter()"/>
+    </div>
+    <button class="btn btn-outline btn-sm" onclick="resetFilter()">Reset</button>
+  </div>
+
+  <div class="tx-list" id="txList"></div>
+</div>
+
+<!-- Add Modal -->
+<div class="modal-overlay" id="addModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Tambah Transaksi</h3>
+      <button class="modal-close" onclick="closeAddModal()">✕</button>
+    </div>
+    <div class="type-toggle">
+      <div class="type-btn income-btn active" id="incomeBtn" onclick="setTxType('INCOME')">💰 Pemasukan</div>
+      <div class="type-btn expense-btn"       id="expenseBtn" onclick="setTxType('EXPENSE')">💸 Pengeluaran</div>
+    </div>
+    <div class="form-group"><label>Jumlah (Rp)</label><input type="number" id="txAmount" min="0"/></div>
+    <div class="form-group"><label>Tanggal</label><input type="date" id="txDate"/></div>
+    <div class="form-group"><label>Deskripsi</label><input type="text" id="txDesc"/></div>
+    <div class="form-group" id="sourceGroup"><label>Sumber</label><input type="text" id="txSource" placeholder="Gaji, Freelance..."/></div>
+    <div class="form-group hidden" id="categoryGroup"><label>Kategori</label><select id="txCategory"></select></div>
+    <div style="display:flex;gap:10px;margin-top:8px">
+      <button class="btn btn-outline" style="flex:1" onclick="closeAddModal()">Batal</button>
+      <button class="btn btn-success" style="flex:1" onclick="submitTransaction()">Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Edit Transaksi</h3>
+      <button class="modal-close" onclick="closeEditModal()">✕</button>
+    </div>
+    <input type="hidden" id="editId"/>
+    <div class="form-group"><label>Jumlah (Rp)</label><input type="number" id="editAmount" min="0"/></div>
+    <div class="form-group"><label>Tanggal</label><input type="date" id="editDate"/></div>
+    <div class="form-group"><label>Deskripsi</label><input type="text" id="editDesc"/></div>
+    <div style="display:flex;gap:10px;margin-top:8px">
+      <button class="btn btn-outline" style="flex:1" onclick="closeEditModal()">Batal</button>
+      <button class="btn btn-primary" style="flex:1" onclick="submitEdit()">Simpan Perubahan</button>
+    </div>
+  </div>
+</div>
+
+<script src="/common.js"></script>
+<script>
+  const userId = document.getElementById('_userId').value;
+  document.getElementById('navUsername').textContent = document.getElementById('_username').value;
+
+  let allTx = [], categories = [], txType = 'INCOME';
+
+  async function init() {
+    try {
+      categories = await api('GET', '/categories') || [];
+      allTx      = await api('GET', `/transactions?userId=${userId}`) || [];
+      populateCategorySelects();
+      renderTxList(allTx, 'txList');
+    } catch (e) { toast('Gagal memuat data: ' + e.message, 'error'); }
+  }
+
+  function populateCategorySelects() {
+    const opts = categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    document.getElementById('txCategory').innerHTML    = opts;
+    document.getElementById('filterCategory').innerHTML = '<option value="">Semua Kategori</option>' + opts;
+  }
+
+  function renderTxList(txs, containerId) {
+    const el = document.getElementById(containerId);
+    if (!txs || txs.length === 0) {
+      el.innerHTML = '<div class="empty-state"><div class="icon">💳</div><div>Belum ada transaksi</div></div>';
+      return;
+    }
+    el.innerHTML = txs.map(t => {
+      const isIncome = t.type === 'INCOME';
+      const meta = isIncome ? `${t.date} · ${t.source||'Pemasukan'}` : `${t.date} · ${t.categoryName||'Pengeluaran'}`;
+      return `<div class="tx-item">
+        <div class="tx-icon ${isIncome?'income':'expense'}">${isIncome?'💰':'💸'}</div>
+        <div class="tx-info"><div class="desc">${t.description||'-'}</div><div class="meta">${meta}</div></div>
+        <div class="tx-amount ${isIncome?'income':'expense'}">${isIncome?'+':'-'} ${fmt(t.amount)}</div>
+        <div class="tx-actions">
+          <button class="btn btn-outline btn-sm" onclick="openEditModal(${t.id})">✏️</button>
+          <button class="btn btn-danger btn-sm"  onclick="deleteTx(${t.id})">🗑️</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  function applyFilter() {
+    const type    = document.getElementById('filterType').value;
+    const catId   = document.getElementById('filterCategory').value;
+    const start   = document.getElementById('filterStart').value;
+    const end     = document.getElementById('filterEnd').value;
+    const keyword = document.getElementById('filterKeyword').value.toLowerCase();
+    let filtered = [...allTx];
+    if (type)    filtered = filtered.filter(t => t.type === type);
+    if (catId)   filtered = filtered.filter(t => t.type==='EXPENSE' && String(t.categoryId)===catId);
+    if (start)   filtered = filtered.filter(t => t.date >= start);
+    if (end)     filtered = filtered.filter(t => t.date <= end);
+    if (keyword) filtered = filtered.filter(t => (t.description||'').toLowerCase().includes(keyword));
+    renderTxList(filtered, 'txList');
+  }
+
+  function resetFilter() {
+    ['filterType','filterCategory'].forEach(id => document.getElementById(id).value = '');
+    ['filterStart','filterEnd','filterKeyword'].forEach(id => document.getElementById(id).value = '');
+    renderTxList(allTx, 'txList');
+    toast('Filter berhasil direset', 'info', 2000);
+  }
+
+  function openAddModal() {
+    txType = 'INCOME'; updateTypeUI();
+    ['txAmount','txDesc','txSource'].forEach(id => document.getElementById(id).value='');
+    document.getElementById('txDate').value = today();
+    document.getElementById('addModal').classList.add('open');
+  }
+  function closeAddModal() { document.getElementById('addModal').classList.remove('open'); }
+
+  function setTxType(t) { txType=t; updateTypeUI(); }
+  function updateTypeUI() {
+    document.getElementById('incomeBtn').classList.toggle('active', txType==='INCOME');
+    document.getElementById('expenseBtn').classList.toggle('active', txType==='EXPENSE');
+    document.getElementById('sourceGroup').classList.toggle('hidden', txType!=='INCOME');
+    document.getElementById('categoryGroup').classList.toggle('hidden', txType!=='EXPENSE');
+  }
+
+  async function submitTransaction() {
+    const amount = document.getElementById('txAmount').value;
+    const date   = document.getElementById('txDate').value;
+    const desc   = document.getElementById('txDesc').value.trim();
+    if (!amount || !date) { toast('Jumlah dan tanggal wajib diisi', 'warning'); return; }
+    try {
+      if (txType === 'INCOME') {
+        await api('POST', `/transactions/income?userId=${userId}`,
+          {amount, date, description:desc, source: document.getElementById('txSource').value.trim()});
+      } else {
+        await api('POST', `/transactions/expense?userId=${userId}`,
+          {amount, date, description:desc, categoryId: document.getElementById('txCategory').value});
+      }
+      closeAddModal();
+      allTx = await api('GET', `/transactions?userId=${userId}`) || [];
+      renderTxList(allTx, 'txList');
+      toast('Transaksi berhasil ditambahkan', 'success');
+    } catch(e) { toast(e.message, 'error'); }
+  }
+
+  function openEditModal(id) {
+    const t = allTx.find(x=>x.id===id); if (!t) return;
+    document.getElementById('editId').value     = t.id;
+    document.getElementById('editAmount').value = t.amount;
+    document.getElementById('editDate').value   = t.date;
+    document.getElementById('editDesc').value   = t.description||'';
+    document.getElementById('editModal').classList.add('open');
+  }
+  function closeEditModal() { document.getElementById('editModal').classList.remove('open'); }
+
+  async function submitEdit() {
+    const id     = document.getElementById('editId').value;
+    const amount = document.getElementById('editAmount').value;
+    const date   = document.getElementById('editDate').value;
+    const desc   = document.getElementById('editDesc').value.trim();
+    if (!amount || !date) { toast('Jumlah dan tanggal wajib diisi', 'warning'); return; }
+    try {
+      await api('PUT', `/transactions/${id}`, {amount, date, description:desc});
+      closeEditModal();
+      allTx = await api('GET', `/transactions?userId=${userId}`) || [];
+      renderTxList(allTx, 'txList');
+      applyFilter();
+      toast('Transaksi berhasil diperbarui', 'success');
+    } catch(e) { toast(e.message, 'error'); }
+  }
+
+  async function deleteTx(id) {
+    if (!confirm('Hapus transaksi ini?')) return;
+    try {
+      await api('DELETE', `/transactions/${id}`);
+      allTx = await api('GET', `/transactions?userId=${userId}`) || [];
+      renderTxList(allTx, 'txList');
+      applyFilter();
+      toast('Transaksi berhasil dihapus', 'success');
+    } catch(e) { toast(e.message, 'error'); }
+  }
+
+  init();
+</script>
+</body>
+</html>

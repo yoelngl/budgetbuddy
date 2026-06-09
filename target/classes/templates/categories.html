@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="id" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>BudgetBuddy – Kategori</title>
+  <link rel="stylesheet" href="/styles.css"/>
+</head>
+<body>
+
+<input type="hidden" id="_userId"   th:value="${userId}"/>
+<input type="hidden" id="_username" th:value="${username}"/>
+
+<nav class="navbar">
+  <a href="/dashboard" class="navbar-brand">Budget<span>Buddy</span></a>
+  <div class="nav-links">
+    <a href="/dashboard"     class="nav-link">📊 Dashboard</a>
+    <a href="/transactions"  class="nav-link">📋 Transaksi</a>
+    <a href="/report"        class="nav-link">📈 Laporan</a>
+    <a href="/categories"    class="nav-link">🏷️ Kategori</a>
+  </div>
+  <div class="navbar-user">
+    <span>👋 <strong id="navUsername"></strong></span>
+    <button onclick="doLogout()">Keluar</button>
+  </div>
+</nav>
+
+<div class="page-content">
+  <div class="section-header">
+    <h2>Kategori Pengeluaran</h2>
+    <button class="btn btn-success btn-sm" onclick="openCatModal()">+ Tambah Kategori</button>
+  </div>
+  <div class="cat-grid" id="catGrid"></div>
+</div>
+
+<!-- Add Category Modal -->
+<div class="modal-overlay" id="catModal">
+  <div class="modal" style="width:380px">
+    <div class="modal-header">
+      <h3>Tambah Kategori</h3>
+      <button class="modal-close" onclick="closeCatModal()">✕</button>
+    </div>
+
+    <div class="form-group">
+      <label>Nama Kategori</label>
+      <input type="text" id="catName" placeholder="Misal: Belanja"/>
+    </div>
+    <div class="form-group">
+      <label>Deskripsi (Opsional)</label>
+      <input type="text" id="catDesc" placeholder="Deskripsi singkat"/>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:8px">
+      <button class="btn btn-outline" style="flex:1" onclick="closeCatModal()">Batal</button>
+      <button class="btn btn-success" style="flex:1" onclick="submitCategory()">Simpan</button>
+    </div>
+  </div>
+</div>
+
+<script src="/common.js"></script>
+<script>
+  document.getElementById('navUsername').textContent = document.getElementById('_username').value;
+
+  let categories = [];
+
+  async function init() {
+    categories = await api('GET', '/categories') || [];
+    renderCategories();
+  }
+
+  function renderCategories() {
+    const grid = document.getElementById('catGrid');
+    if (categories.length === 0) {
+      grid.innerHTML = '<div class="empty-state"><div class="icon">🏷️</div><div>Belum ada kategori</div></div>';
+      return;
+    }
+    grid.innerHTML = categories.map(c => `
+      <div class="cat-card">
+        <div class="cat-info">
+          <div class="name">🏷️ ${c.name}</div>
+          <div class="desc">${c.description||''}</div>
+        </div>
+        <button class="btn btn-danger btn-sm" onclick="deleteCategory(${c.id})">🗑️</button>
+      </div>`
+    ).join('');
+  }
+
+  function openCatModal() {
+    document.getElementById('catName').value = '';
+    document.getElementById('catDesc').value = '';
+    document.getElementById('catModal').classList.add('open');
+  }
+  function closeCatModal() { document.getElementById('catModal').classList.remove('open'); }
+
+  async function submitCategory() {
+    const name = document.getElementById('catName').value.trim();
+    const desc = document.getElementById('catDesc').value.trim();
+    if (!name) { toast('Nama kategori wajib diisi', 'warning'); return; }
+    try {
+      await api('POST', '/categories', {name, description: desc});
+      closeCatModal();
+      categories = await api('GET', '/categories') || [];
+      renderCategories();
+      toast('Kategori berhasil ditambahkan', 'success');
+    } catch(e) { toast(e.message, 'error'); }
+  }
+
+  async function deleteCategory(id) {
+    if (!confirm('Hapus kategori ini?')) return;
+    try {
+      await api('DELETE', `/categories/${id}`);
+      categories = await api('GET', '/categories') || [];
+      renderCategories();
+      toast('Kategori berhasil dihapus', 'success');
+    } catch(e) { toast(e.message, 'error'); }
+  }
+
+  init();
+</script>
+</body>
+</html>

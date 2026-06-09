@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="id" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>BudgetBuddy – Masuk</title>
+  <link rel="stylesheet" href="/styles.css"/>
+</head>
+<body>
+
+<div class="auth-page">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <h1>Budget<span>Buddy</span></h1>
+      <p>Aplikasi Pencatatan Keuangan Pribadi</p>
+    </div>
+
+    <div class="form-group">
+      <label>Username</label>
+      <input type="text" id="username" placeholder="Masukkan username" autocomplete="username"/>
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="password" placeholder="Masukkan password" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter') doLogin()"/>
+    </div>
+    <button class="btn btn-primary" onclick="doLogin()">Masuk</button>
+
+    <div class="auth-footer">
+      Belum punya akun? <a href="/register">Daftar sekarang</a>
+    </div>
+  </div>
+</div>
+
+<script src="/common.js"></script>
+<script>
+  async function doLogin() {
+    const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value;
+    if (!username || !password) { toast('Username dan password wajib diisi', 'warning'); return; }
+    try {
+      await api('POST', '/users/login', { username, password });
+      toast('Login berhasil! Mengalihkan...', 'success', 1500);
+      setTimeout(() => { window.location.href = '/dashboard'; }, 800);
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  }
+</script>
+</body>
+</html>

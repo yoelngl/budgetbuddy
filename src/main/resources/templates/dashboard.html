@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="id" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>BudgetBuddy – Dashboard</title>
+  <link rel="stylesheet" href="/styles.css"/>
+</head>
+<body>
+
+<input type="hidden" id="_userId"   th:value="${userId}"/>
+<input type="hidden" id="_username" th:value="${username}"/>
+
+<nav class="navbar">
+  <a href="/dashboard" class="navbar-brand">Budget<span>Buddy</span></a>
+  <div class="nav-links">
+    <a href="/dashboard"    class="nav-link">📊 Dashboard</a>
+    <a href="/transactions" class="nav-link">📋 Transaksi</a>
+    <a href="/report"       class="nav-link">📈 Laporan</a>
+    <a href="/categories"   class="nav-link">🏷️ Kategori</a>
+  </div>
+  <div class="navbar-user">
+    <span>👋 <strong id="navUsername"></strong></span>
+    <button onclick="doLogout()">Keluar</button>
+  </div>
+</nav>
+
+<div class="page-content">
+  <div class="summary-grid">
+    <div class="summary-card income">
+      <div class="label">Total Pemasukan</div>
+      <div class="value" id="dashIncome">Rp 0</div>
+      <div class="sub">Bulan ini</div>
+    </div>
+    <div class="summary-card expense">
+      <div class="label">Total Pengeluaran</div>
+      <div class="value" id="dashExpense">Rp 0</div>
+      <div class="sub">Bulan ini</div>
+    </div>
+    <div class="summary-card balance">
+      <div class="label">Saldo</div>
+      <div class="value" id="dashBalance">Rp 0</div>
+      <div class="sub">Bulan ini</div>
+    </div>
+  </div>
+
+  <div class="section-header">
+    <h2>Transaksi Terbaru</h2>
+    <button class="btn btn-success btn-sm" onclick="openAddModal()">+ Tambah Transaksi</button>
+  </div>
+  <div class="tx-list" id="txList"></div>
+</div>
+
+<!-- Add Transaction Modal -->
+<div class="modal-overlay" id="addModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Tambah Transaksi</h3>
+      <button class="modal-close" onclick="closeAddModal()">✕</button>
+    </div>
+    <div class="type-toggle">
+      <div class="type-btn income-btn active" id="incomeBtn" onclick="setTxType('INCOME')">💰 Pemasukan</div>
+      <div class="type-btn expense-btn"       id="expenseBtn" onclick="setTxType('EXPENSE')">💸 Pengeluaran</div>
+    </div>
+    <div class="form-group">
+      <label>Jumlah (Rp)</label>
+      <input type="number" id="txAmount" placeholder="0" min="0"/>
+    </div>
+    <div class="form-group">
+      <label>Tanggal</label>
+      <input type="date" id="txDate"/>
+    </div>
+    <div class="form-group">
+      <label>Deskripsi</label>
+      <input type="text" id="txDesc" placeholder="Deskripsi transaksi"/>
+    </div>
+    <div class="form-group" id="sourceGroup">
+      <label>Sumber (Opsional)</label>
+      <input type="text" id="txSource" placeholder="Misal: Gaji, Freelance"/>
+    </div>
+    <div class="form-group hidden" id="categoryGroup">
+      <label>Kategori</label>
+      <select id="txCategory"></select>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:8px">
+      <button class="btn btn-outline" style="flex:1" onclick="closeAddModal()">Batal</button>
+      <button class="btn btn-success" style="flex:1" onclick="submitTransaction()">Simpan</button>
+    </div>
+  </div>
+</div>
+
+<script src="/common.js"></script>
+<script>
+  const userId = document.getElementById('_userId').value;
+  document.getElementById('navUsername').textContent = document.getElementById('_username').value;
+
+  let allTx = [], categories = [], txType = 'INCOME';
+
+  async function init() {
+    try {
+      categories = await api('GET', '/categories') || [];
+      allTx      = await api('GET', `/transactions?userId=${userId}`) || [];
+      populateCategorySelect();
+      loadDashboard();
+    } catch (e) { toast('Gagal memuat data: ' + e.message, 'error'); }
+  }
+
+  function loadDashboard() {
+    const now = new Date(), m = now.getMonth()+1, y = now.getFullYear();
+    const monthTx = allTx.filter(t => {
+      const d = new Date(t.date);
+      return d.getMonth()+1 === m && d.getFullYear() === y;
+    });
+    const income  = monthTx.filter(t=>t.type==='INCOME').reduce((s,t)=>s+t.amount, 0);
+    const expense = monthTx.filter(t=>t.type==='EXPENSE').reduce((s,t)=>s+t.amount, 0);
+    document.getElementById('dashIncome').textContent  = fmt(income);
+    document.getElementById('dashExpense').textContent = fmt(expense);
+    document.getElementById('dashBalance').textContent = fmt(income - expense);
+    renderTxList([...allTx].slice(0, 5), 'txList');
+  }
+
+  function renderTxList(txs, containerId) {
+    const el = document.getElementById(containerId);
+    if (!txs || txs.length === 0) {
+      el.innerHTML = '<div class="empty-state"><div class="icon">💳</div><div>Belum ada transaksi</div></div>';
+      return;
+    }
+    el.innerHTML = txs.map(t => {
+      const isIncome = t.type === 'INCOME';
+      const meta = isIncome ? `${t.date} · ${t.source||'Pemasukan'}` : `${t.date} · ${t.categoryName||'Pengeluaran'}`;
+      return `<div class="tx-item">
+        <div class="tx-icon ${isIncome?'income':'expense'}">${isIncome?'💰':'💸'}</div>
+        <div class="tx-info"><div class="desc">${t.description||'-'}</div><div class="meta">${meta}</div></div>
+        <div class="tx-amount ${isIncome?'income':'expense'}">${isIncome?'+':'-'} ${fmt(t.amount)}</div>
+      </div>`;
+    }).join('');
+  }
+
+  function populateCategorySelect() {
+    document.getElementById('txCategory').innerHTML =
+      categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  }
+
+  function openAddModal() {
+    txType = 'INCOME'; updateTypeUI();
+    ['txAmount','txDesc','txSource'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('txDate').value = today();
+    document.getElementById('addModal').classList.add('open');
+  }
+  function closeAddModal() { document.getElementById('addModal').classList.remove('open'); }
+
+  function setTxType(t) { txType = t; updateTypeUI(); }
+  function updateTypeUI() {
+    document.getElementById('incomeBtn').classList.toggle('active', txType==='INCOME');
+    document.getElementById('expenseBtn').classList.toggle('active', txType==='EXPENSE');
+    document.getElementById('sourceGroup').classList.toggle('hidden', txType!=='INCOME');
+    document.getElementById('categoryGroup').classList.toggle('hidden', txType!=='EXPENSE');
+  }
+
+  async function submitTransaction() {
+    const amount = document.getElementById('txAmount').value;
+    const date   = document.getElementById('txDate').value;
+    const desc   = document.getElementById('txDesc').value.trim();
+    if (!amount || !date) { toast('Jumlah dan tanggal wajib diisi', 'warning'); return; }
+    try {
+      if (txType === 'INCOME') {
+        await api('POST', `/transactions/income?userId=${userId}`,
+          { amount, date, description: desc, source: document.getElementById('txSource').value.trim() });
+      } else {
+        await api('POST', `/transactions/expense?userId=${userId}`,
+          { amount, date, description: desc, categoryId: document.getElementById('txCategory').value });
+      }
+      closeAddModal();
+      allTx = await api('GET', `/transactions?userId=${userId}`) || [];
+      loadDashboard();
+      toast('Transaksi berhasil ditambahkan', 'success');
+    } catch(e) { toast(e.message, 'error'); }
+  }
+
+  init();
+</script>
+</body>
+</html>

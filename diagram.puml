@@ -1,0 +1,545 @@
+' ============================================================
+'  BudgetBuddy — Class Diagrams
+'  Each @startuml/@enduml block is a separate diagram.
+'
+'  Diagram 1 : Model Layer  (abstract class + inheritance)
+'  Diagram 2 : Repository Layer  (interface + implementations)
+'  Diagram 3 : Service Layer
+'  Diagram 4 : Controller Layer
+'  Diagram 5 : Full Overview  (all layers + all relations)
+' ============================================================
+
+' ===========================================================
+'  DIAGRAM 1 — Model Layer
+' ===========================================================
+@startuml 01_Model_Layer
+
+skinparam classAttributeIconSize 0
+skinparam class {
+    BackgroundColor #FEFEFE
+    BorderColor     #2d6a9f
+    ArrowColor      #1e3a5f
+    FontSize        13
+}
+skinparam stereotypeABackgroundColor #ffe5cc
+skinparam linetype ortho
+
+title BudgetBuddy — Diagram 1: Model Layer
+
+' Abstract base class
+abstract class Transaction <<abstract>> {
+    -id          : Long
+    -amount      : double
+    -date        : LocalDate
+    -description : String
+    -userId      : Long
+    --
+    +getId() : Long
+    +setId(id : Long) : void
+    +getAmount() : double
+    +setAmount(amount : double) : void
+    +getDate() : LocalDate
+    +setDate(date : LocalDate) : void
+    +getDescription() : String
+    +setDescription(description : String) : void
+    +getUserId() : Long
+    +setUserId(userId : Long) : void
+    +{abstract} getType() : String
+    +toString() : String
+}
+
+' Concrete subclasses — Inheritance
+class Income {
+    -source : String
+    --
+    +Income(amount : double, date : LocalDate,\n  description : String, source : String, userId : Long)
+    +getSource() : String
+    +setSource(source : String) : void
+    +getType() : String
+}
+
+class Expense {
+    -categoryId   : Long
+    -categoryName : String
+    --
+    +Expense(amount : double, date : LocalDate,\n  description : String, categoryId : Long,\n  categoryName : String, userId : Long)
+    +getCategoryId() : Long
+    +setCategoryId(categoryId : Long) : void
+    +getCategoryName() : String
+    +setCategoryName(categoryName : String) : void
+    +getType() : String
+}
+
+class Category {
+    -id          : Long
+    -name        : String
+    -description : String
+    --
+    +Category(id : Long, name : String, description : String)
+    +getId() : Long
+    +setId(id : Long) : void
+    +getName() : String
+    +setName(name : String) : void
+    +getDescription() : String
+    +setDescription(description : String) : void
+}
+
+class User {
+    -id       : Long
+    -username : String
+    -email    : String
+    -password : String
+    --
+    +User(id : Long, username : String,\n  email : String, password : String)
+    +getId() : Long
+    +setId(id : Long) : void
+    +getUsername() : String
+    +setUsername(username : String) : void
+    +getEmail() : String
+    +setEmail(email : String) : void
+    +getPassword() : String
+    +setPassword(password : String) : void
+}
+
+class MonthlyReport {
+    -month        : int
+    -year         : int
+    -totalIncome  : double
+    -totalExpense : double
+    -transactions : List<Transaction>
+    --
+    +MonthlyReport(month : int, year : int)
+    +generate(allTransactions : List<Transaction>) : void
+    +getMonth() : int
+    +getYear() : int
+    +getTotalIncome() : double
+    +getTotalExpense() : double
+    +getBalance() : double
+    +getTransactions() : List<Transaction>
+}
+
+' Inheritance relations
+Transaction <|-- Income  : extends
+Transaction <|-- Expense : extends
+
+' Associations
+Expense       --> Category    : uses >
+MonthlyReport --> Transaction : contains >
+
+@enduml
+
+
+' ===========================================================
+'  DIAGRAM 2 — Repository Layer
+' ===========================================================
+@startuml 02_Repository_Layer
+
+skinparam classAttributeIconSize 0
+skinparam class {
+    BackgroundColor #FEFEFE
+    BorderColor     #2d6a9f
+    ArrowColor      #1e3a5f
+    FontSize        13
+}
+skinparam stereotypeIBackgroundColor #d4ffd4
+skinparam linetype ortho
+
+title BudgetBuddy — Diagram 2: Repository Layer
+
+' Generic interface
+interface "IRepository<T>" as IRepository <<interface>> {
+    +save(entity : T) : T
+    +findAll() : List<T>
+    +findById(id : Long) : Optional<T>
+    +delete(id : Long) : boolean
+    +update(entity : T) : T
+}
+
+class TransactionRepository {
+    -transactions : List<Transaction>
+    -idCounter    : AtomicLong
+    --
+    +save(transaction : Transaction) : Transaction
+    +findAll() : List<Transaction>
+    +findById(id : Long) : Optional<Transaction>
+    +delete(id : Long) : boolean
+    +update(transaction : Transaction) : Transaction
+    +findByUserId(userId : Long) : List<Transaction>
+    +findByUserIdAndDateRange(userId : Long,\n  start : LocalDate, end : LocalDate) : List<Transaction>
+}
+
+class CategoryRepository {
+    -categories : List<Category>
+    -idCounter  : AtomicLong
+    --
+    +save(category : Category) : Category
+    +findAll() : List<Category>
+    +findById(id : Long) : Optional<Category>
+    +delete(id : Long) : boolean
+    +update(category : Category) : Category
+}
+
+class UserRepository {
+    -users     : List<User>
+    -idCounter : AtomicLong
+    --
+    +save(user : User) : User
+    +findAll() : List<User>
+    +findById(id : Long) : Optional<User>
+    +delete(id : Long) : boolean
+    +update(user : User) : User
+    +findByUsername(username : String) : Optional<User>
+    +findByEmail(email : String) : Optional<User>
+}
+
+' Interface implementation
+TransactionRepository ..|> IRepository : implements
+CategoryRepository    ..|> IRepository : implements
+UserRepository        ..|> IRepository : implements
+
+@enduml
+
+
+' ===========================================================
+'  DIAGRAM 3 — Service Layer
+' ===========================================================
+@startuml 03_Service_Layer
+
+skinparam classAttributeIconSize 0
+skinparam class {
+    BackgroundColor #FEFEFE
+    BorderColor     #2d6a9f
+    ArrowColor      #1e3a5f
+    FontSize        13
+}
+skinparam linetype ortho
+
+title BudgetBuddy — Diagram 3: Service Layer
+
+' Referenced repository classes (simplified)
+class TransactionRepository {
+    +findByUserId(userId : Long) : List<Transaction>
+    +findByUserIdAndDateRange(...) : List<Transaction>
+}
+class CategoryRepository {
+    +findById(id : Long) : Optional<Category>
+}
+class UserRepository {
+    +findByUsername(username : String) : Optional<User>
+    +findByEmail(email : String) : Optional<User>
+}
+
+' Service classes
+class TransactionService {
+    -transactionRepository : TransactionRepository
+    -categoryRepository    : CategoryRepository
+    --
+    +addIncome(amount : double, date : LocalDate,\n  description : String, source : String,\n  userId : Long) : Transaction
+    +addExpense(amount : double, date : LocalDate,\n  description : String, categoryId : Long,\n  userId : Long) : Transaction
+    +getAllTransactions(userId : Long) : List<Transaction>
+    +getTransactionById(id : Long) : Optional<Transaction>
+    +updateTransaction(id : Long, amount : double,\n  date : LocalDate, description : String) : Transaction
+    +deleteTransaction(id : Long) : boolean
+    +filterByCategory(userId : Long, categoryId : Long) : List<Transaction>
+    +filterByDateRange(userId : Long,\n  startDate : LocalDate, endDate : LocalDate) : List<Transaction>
+    +filterByType(userId : Long, type : String) : List<Transaction>
+    +searchByKeyword(userId : Long, keyword : String) : List<Transaction>
+}
+
+class CategoryService {
+    -categoryRepository : CategoryRepository
+    --
+    +getAllCategories() : List<Category>
+    +getCategoryById(id : Long) : Optional<Category>
+    +addCategory(name : String, description : String) : Category
+    +deleteCategory(id : Long) : boolean
+    +updateCategory(id : Long, name : String,\n  description : String) : Category
+}
+
+class ReportService {
+    -transactionRepository : TransactionRepository
+    --
+    +generateMonthlyReport(userId : Long,\n  month : int, year : int) : MonthlyReport
+}
+
+class UserService {
+    -userRepository : UserRepository
+    --
+    +register(username : String, email : String,\n  password : String) : User
+    +login(username : String, password : String) : Optional<User>
+    +getUserById(id : Long) : Optional<User>
+}
+
+' Dependencies
+TransactionService --> TransactionRepository : uses >
+TransactionService --> CategoryRepository    : uses >
+ReportService      --> TransactionRepository : uses >
+UserService        --> UserRepository        : uses >
+CategoryService    --> CategoryRepository    : uses >
+
+@enduml
+
+
+' ===========================================================
+'  DIAGRAM 4 — Controller Layer
+' ===========================================================
+@startuml 04_Controller_Layer
+
+skinparam classAttributeIconSize 0
+skinparam class {
+    BackgroundColor #FEFEFE
+    BorderColor     #2d6a9f
+    ArrowColor      #1e3a5f
+    FontSize        13
+}
+skinparam linetype ortho
+
+title BudgetBuddy — Diagram 4: Controller Layer
+
+' Referenced service classes (simplified)
+class TransactionService {
+    +addIncome(...) : Transaction
+    +addExpense(...) : Transaction
+    +getAllTransactions(userId : Long) : List<Transaction>
+    +updateTransaction(...) : Transaction
+    +deleteTransaction(id : Long) : boolean
+    +filterByCategory(...) : List<Transaction>
+    +filterByDateRange(...) : List<Transaction>
+    +filterByType(...) : List<Transaction>
+    +searchByKeyword(...) : List<Transaction>
+}
+class CategoryService {
+    +getAllCategories() : List<Category>
+    +addCategory(...) : Category
+    +deleteCategory(id : Long) : boolean
+}
+class ReportService {
+    +generateMonthlyReport(userId : Long,\n  month : int, year : int) : MonthlyReport
+}
+class UserService {
+    +register(...) : User
+    +login(...) : Optional<User>
+}
+
+' REST Controllers
+class TransactionController {
+    -transactionService : TransactionService
+    --
+    +getAll(userId : Long) : ResponseEntity
+    +addIncome(userId : Long, body : Map) : ResponseEntity
+    +addExpense(userId : Long, body : Map) : ResponseEntity
+    +update(id : Long, body : Map) : ResponseEntity
+    +delete(id : Long) : ResponseEntity
+    +filter(userId : Long, categoryId : Long,\n  startDate : String, endDate : String,\n  type : String, keyword : String) : ResponseEntity
+}
+
+class CategoryController {
+    -categoryService : CategoryService
+    --
+    +getAll() : ResponseEntity
+    +add(body : Map) : ResponseEntity
+    +delete(id : Long) : ResponseEntity
+}
+
+class ReportController {
+    -reportService : ReportService
+    --
+    +getMonthlyReport(userId : Long,\n  month : int, year : int) : ResponseEntity
+}
+
+class UserController {
+    -userService : UserService
+    --
+    +register(body : Map) : ResponseEntity
+    +login(body : Map) : ResponseEntity
+}
+
+' Dependencies
+TransactionController --> TransactionService : calls >
+CategoryController    --> CategoryService    : calls >
+ReportController      --> ReportService      : calls >
+UserController        --> UserService        : calls >
+
+@enduml
+
+
+' ===========================================================
+'  DIAGRAM 5 — Full Overview (All Layers + All Relations)
+' ===========================================================
+@startuml 05_Full_Overview
+
+skinparam classAttributeIconSize 0
+skinparam class {
+    BackgroundColor #FEFEFE
+    BorderColor     #2d6a9f
+    ArrowColor      #1e3a5f
+    FontSize        11
+}
+skinparam stereotypeCBackgroundColor #d4e8ff
+skinparam stereotypeABackgroundColor #ffe5cc
+skinparam stereotypeIBackgroundColor #d4ffd4
+skinparam linetype ortho
+
+title BudgetBuddy — Diagram 5: Full Overview
+
+' ---- MODEL ----
+package "Model" #f0f8ff {
+    abstract class Transaction <<abstract>> {
+        -id : Long
+        -amount : double
+        -date : LocalDate
+        -description : String
+        -userId : Long
+        --
+        +{abstract} getType() : String
+        +getId() : Long
+        +getAmount() : double
+        +getDate() : LocalDate
+        +getDescription() : String
+        +getUserId() : Long
+    }
+    class Income {
+        -source : String
+        --
+        +getSource() : String
+        +getType() : String
+    }
+    class Expense {
+        -categoryId : Long
+        -categoryName : String
+        --
+        +getCategoryId() : Long
+        +getCategoryName() : String
+        +getType() : String
+    }
+    class Category {
+        -id : Long
+        -name : String
+        -description : String
+        --
+        +getId() : Long
+        +getName() : String
+    }
+    class User {
+        -id : Long
+        -username : String
+        -email : String
+        -password : String
+        --
+        +getId() : Long
+        +getUsername() : String
+    }
+    class MonthlyReport {
+        -month : int
+        -year : int
+        -totalIncome : double
+        -totalExpense : double
+        --
+        +generate(List<Transaction>) : void
+        +getBalance() : double
+    }
+}
+
+' ---- REPOSITORY ----
+package "Repository" #f0fff0 {
+    interface "IRepository<T>" as IRepository <<interface>> {
+        +save(entity : T) : T
+        +findAll() : List<T>
+        +findById(id : Long) : Optional<T>
+        +delete(id : Long) : boolean
+        +update(entity : T) : T
+    }
+    class TransactionRepository {
+        +save(t : Transaction) : Transaction
+        +findByUserId(userId : Long) : List<Transaction>
+        +findByUserIdAndDateRange(...) : List<Transaction>
+    }
+    class CategoryRepository {
+        +save(c : Category) : Category
+        +findAll() : List<Category>
+    }
+    class UserRepository {
+        +save(u : User) : User
+        +findByUsername(username : String) : Optional<User>
+    }
+}
+
+' ---- SERVICE ----
+package "Service" #fffff0 {
+    class TransactionService {
+        +addIncome(...) : Transaction
+        +addExpense(...) : Transaction
+        +updateTransaction(...) : Transaction
+        +deleteTransaction(id : Long) : boolean
+        +filterByCategory(...) : List<Transaction>
+        +filterByDateRange(...) : List<Transaction>
+        +filterByType(...) : List<Transaction>
+        +searchByKeyword(...) : List<Transaction>
+    }
+    class CategoryService {
+        +addCategory(...) : Category
+        +deleteCategory(id : Long) : boolean
+        +getAllCategories() : List<Category>
+    }
+    class ReportService {
+        +generateMonthlyReport(userId, month, year) : MonthlyReport
+    }
+    class UserService {
+        +register(...) : User
+        +login(...) : Optional<User>
+    }
+}
+
+' ---- CONTROLLER ----
+package "Controller" #fff0f0 {
+    class TransactionController {
+        +getAll(userId : Long) : ResponseEntity
+        +addIncome(...) : ResponseEntity
+        +addExpense(...) : ResponseEntity
+        +update(...) : ResponseEntity
+        +delete(id : Long) : ResponseEntity
+        +filter(...) : ResponseEntity
+    }
+    class CategoryController {
+        +getAll() : ResponseEntity
+        +add(...) : ResponseEntity
+        +delete(id : Long) : ResponseEntity
+    }
+    class ReportController {
+        +getMonthlyReport(...) : ResponseEntity
+    }
+    class UserController {
+        +register(...) : ResponseEntity
+        +login(...) : ResponseEntity
+    }
+}
+
+' ---- RELATIONS ----
+
+' Inheritance
+Transaction <|-- Income  : extends
+Transaction <|-- Expense : extends
+
+' Interface implementation
+TransactionRepository ..|> IRepository : implements
+CategoryRepository    ..|> IRepository : implements
+UserRepository        ..|> IRepository : implements
+
+' Model associations
+Expense       --> Category    : uses >
+MonthlyReport --> Transaction : contains >
+
+' Service -> Repository
+TransactionService --> TransactionRepository : uses >
+TransactionService --> CategoryRepository    : uses >
+ReportService      --> TransactionRepository : uses >
+UserService        --> UserRepository        : uses >
+CategoryService    --> CategoryRepository    : uses >
+
+' Controller -> Service
+TransactionController --> TransactionService : calls >
+CategoryController    --> CategoryService    : calls >
+ReportController      --> ReportService      : calls >
+UserController        --> UserService        : calls >
+
+@enduml

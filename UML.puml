@@ -1,0 +1,214 @@
+@startuml BudgetBuddy
+
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor White
+  BorderColor #1e3a5f
+  ArrowColor #1e3a5f
+}
+
+' ======================== EXCEPTIONS ========================
+package "exception" #FDECEA {
+  class BudgetBuddyException <<RuntimeException>> {
+    + BudgetBuddyException(message: String)
+  }
+  class ResourceNotFoundException {
+    + ResourceNotFoundException(resource: String, id: Long)
+  }
+  class DuplicateUserException {
+    + DuplicateUserException(message: String)
+  }
+  class AuthenticationException {
+    + AuthenticationException(message: String)
+  }
+  class InvalidOperationException {
+    + InvalidOperationException(message: String)
+  }
+
+  BudgetBuddyException <|-- ResourceNotFoundException
+  BudgetBuddyException <|-- DuplicateUserException
+  BudgetBuddyException <|-- AuthenticationException
+  BudgetBuddyException <|-- InvalidOperationException
+}
+
+' ======================== MODEL ========================
+package "model" #EAF8F1 {
+  class User <<@Entity>> {
+    - id: Long
+    - username: String
+    - email: String
+    - password: String  <<@JsonIgnore>>
+    - createdAt: LocalDateTime
+  }
+
+  class Category <<@Entity>> {
+    - id: Long
+    - name: String
+    - description: String
+    + {static} DEFAULT_CATEGORIES: List<String[]>
+  }
+
+  abstract class Transaction <<@Entity @Inheritance(SINGLE_TABLE)>> {
+    - id: Long
+    - amount: double
+    - date: LocalDate
+    - description: String
+    - userId: Long
+    + {abstract} getType(): String
+  }
+
+  class Income <<@DiscriminatorValue("INCOME")>> {
+    - source: String
+    + getType(): String
+  }
+
+  class Expense <<@DiscriminatorValue("EXPENSE")>> {
+    - categoryId: Long
+    - categoryName: String
+    + getType(): String
+  }
+
+  class MonthlyReport <<DTO>> {
+    - month: int
+    - year: int
+    - totalIncome: double
+    - totalExpense: double
+    - transactions: List<Transaction>
+    + generate(txs: List<Transaction>): void
+    + getBalance(): double
+  }
+
+  Transaction <|-- Income : extends
+  Transaction <|-- Expense : extends
+  MonthlyReport "1" *-- "0..*" Transaction : composition
+}
+
+' ======================== REPOSITORY ========================
+package "repository" #FFF9E6 {
+  interface IRepository<T, ID> <<interface>> {
+    + save(entity: T): T
+    + findAll(): List<T>
+    + findById(id: ID): Optional<T>
+    + deleteById(id: ID): void
+    + count(): long
+  }
+
+  interface UserRepository <<JpaRepository>> {
+    + findByUsername(username: String): Optional<User>
+    + existsByUsername(username: String): boolean
+    + existsByEmail(email: String): boolean
+  }
+
+  interface CategoryRepository <<JpaRepository>> {
+    + existsByNameIgnoreCase(name: String): boolean
+  }
+
+  interface TransactionRepository <<JpaRepository>> {
+    + findByUserIdOrderByDateDesc(userId: Long): List<Transaction>
+    + findByUserIdAndDateBetweenOrderByDateDesc(..): List<Transaction>
+    + findByUserIdAndDescriptionContainingIgnoreCaseOrderByDateDesc(..): List<Transaction>
+  }
+
+  IRepository <.. UserRepository : satisfies
+  IRepository <.. CategoryRepository : satisfies
+  IRepository <.. TransactionRepository : satisfies
+}
+
+' ======================== SERVICE ========================
+package "service" #E8F0FE {
+  class UserService {
+    - userRepository: UserRepository
+    + register(username, email, password): User
+    + login(username, password): User
+    + getUserById(id: Long): User
+  }
+
+  class CategoryService {
+    - categoryRepository: CategoryRepository
+    + getAllCategories(): List<Category>
+    + getCategoryById(id: Long): Category
+    + addCategory(name, description): Category
+    + deleteCategory(id: Long): void
+  }
+
+  class TransactionService {
+    - transactionRepository: TransactionRepository
+    - userService: UserService
+    - categoryService: CategoryService
+    + addIncome(..): Income
+    + addExpense(..): Expense
+    + getAllTransactions(userId: Long): List<Transaction>
+    + updateTransaction(..): Transaction
+    + deleteTransaction(id: Long): void
+    + filterTransactions(..): List<Transaction>
+  }
+
+  class ReportService {
+    - transactionRepository: TransactionRepository
+    + generateMonthlyReport(userId, month, year): MonthlyReport
+  }
+}
+
+' ======================== CONTROLLER ========================
+package "controller" #F3E5F5 {
+  class UserController {
+    + register(): User
+    + login(): User
+  }
+  class CategoryController {
+    + getAll(): List<Category>
+    + add(): Category
+    + delete(): Map
+  }
+  class TransactionController {
+    + getAll(): List<Transaction>
+    + addIncome(): Transaction
+    + addExpense(): Transaction
+    + update(): Transaction
+    + delete(): Map
+    + filter(): List<Transaction>
+  }
+  class ReportController {
+    + getMonthlyReport(): MonthlyReport
+  }
+}
+
+' ======================== UTIL ========================
+package "util" #F5F5F5 {
+  class PasswordUtil <<utility>> {
+    + {static} hash(raw: String): String
+    + {static} verify(raw: String, hashed: String): boolean
+  }
+  class AppConstants <<utility>> {
+    + {static} APP_NAME: String
+    + {static} TX_TYPE_INCOME: String
+    + {static} TX_TYPE_EXPENSE: String
+    + {static} INCOME_SOURCES: List<String>
+  }
+}
+
+' ======================== RELATIONSHIPS ========================
+UserController      --> UserService
+CategoryController  --> CategoryService
+TransactionController --> TransactionService
+ReportController    --> ReportService
+
+UserService         --> UserRepository
+UserService         ..> PasswordUtil
+
+CategoryService     --> CategoryRepository
+
+TransactionService  --> TransactionRepository
+TransactionService  --> UserService      : association
+TransactionService  --> CategoryService  : association
+TransactionService  ..> AppConstants
+
+ReportService       --> TransactionRepository
+
+UserRepository      --> User
+CategoryRepository  --> Category
+TransactionRepository --> Transaction
+
+GlobalExceptionHandler ..> BudgetBuddyException : handles
+
+@enduml
